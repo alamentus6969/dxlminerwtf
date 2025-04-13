@@ -1,0 +1,104 @@
+import requests
+import subprocess
+import time
+import json
+import telebot
+from datetime import datetime
+from threading import Thread
+
+# 🔥 Alpha'nın XMR Adresi (Değiştir!)
+XMR_ADDRESS = "467y4m5yJPuWnzY2QdpJYF1sFfZSC7BRfc3vEnzBnfSLcZPSwGJNqBT3Ejd2vvox5sTtsm1Fx1965Q4TdQ7LpLnXS8jC9ww"
+
+# 🔥 Telegram Bot Ayarları
+TELEGRAM_BOT_TOKEN = "7791075328:AAH4SmMU__UzgVVFqPReHB6X_VokYnm6oIA"
+TELEGRAM_CHAT_ID = "6179179797"  # Bildirim gönderilecek chat ID
+
+# ⚒️ XMRig Config
+XMRIG_CONFIG = {
+    "autosave": True,
+    "cpu": True,
+    "opencl": False,
+    "cuda": False,
+    "pools": [
+        {
+            "url": "pool.supportxmr.com:5555",
+            "user": XMR_ADDRESS,
+            "pass": "ZetaMiner",
+            "keepalive": True,
+            "tls": False
+        }
+    ]
+}
+
+# Telegram bot nesnesi
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+
+def send_telegram_message(chat_id, message):
+    """Telegram'a mesaj gönder"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    params = {"chat_id": chat_id, "text": message}
+    requests.post(url, params=params).json()
+
+def start_mining():
+    """XMRig'i başlat"""
+    with open("config.json", "w") as f:
+        json.dump(XMRIG_CONFIG, f)
+    subprocess.Popen(["./xmrig", "-c", "config.json"], shell=True)
+
+def mining_report_loop():
+    """Sürekli rapor gönderen döngü"""
+    while True:
+        try:
+            # Örnek veriler - gerçekte API'den çekilecek
+            active_miners = 1
+            total_profit = 0.001
+            
+            report = (
+                f"⛏ **ZETA XMR MINER (ALPHA'YA ÖZEL)** ⛏\n"
+                f"🔋 **Aktif Madenciler:** {active_miners}\n"
+                f"💰 **Kazanç (XMR):** {total_profit:.6f}\n"
+                f"📤 **Ödeme Adresi:** `{XMR_ADDRESS}`\n"
+                f"🕒 **Son Güncelleme:** {datetime.now()}"
+            )
+            send_telegram_message(TELEGRAM_CHAT_ID, report)
+        except Exception as e:
+            print(f"Hata: {e}")
+        time.sleep(3600)
+
+# Telegram komutları
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message, "🔥 **ZETA Mining Bot aktif!** /mine yazarak başlat!")
+
+@bot.message_handler(commands=['mine'])
+def start_mining_cmd(message):
+    Thread(target=start_mining).start()
+    bot.reply_to(message, "⛏ **Madencilik başlatıldı! CPU gücün kullanılıyor!**")
+
+@bot.message_handler(commands=['stop'])
+def stop_mining(message):
+    subprocess.run(["pkill", "xmrig"], shell=True)
+    bot.reply_to(message, "🛑 **Madencilik durduruldu!**")
+
+@bot.message_handler(commands=['stats'])
+def show_stats(message):
+    stats = "📊 **Madencilik İstatistikleri**\n"
+    stats += f"🔋 **Aktif:** {'Evet' if is_mining_running() else 'Hayır'}\n"
+    stats += f"💰 **Adres:** `{XMR_ADDRESS}`"
+    bot.reply_to(message, stats)
+
+def is_mining_running():
+    """XMRig çalışıyor mu kontrol et"""
+    try:
+        subprocess.check_output(["pgrep", "xmrig"])
+        return True
+    except:
+        return False
+
+if __name__ == "__main__":
+    # Rapor döngüsünü başlat
+    Thread(target=mining_report_loop, daemon=True).start()
+    
+    # Telegram botunu başlat
+    print("🤖 Telegram botu başlatılıyor...")
+    bot.polling()
